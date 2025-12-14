@@ -1,7 +1,7 @@
 """Alignment logic between HPG NGOs and grant opportunities."""
 
 from collections import Counter
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 from hpg_grant_stw.models import AlignmentResult, GrantOpportunity, NGO
 
@@ -61,3 +61,45 @@ def align(ngos: Iterable[NGO], grants: Iterable[GrantOpportunity]) -> List[Align
             results.append(score_alignment(ngo, grant))
 
     return sorted(results, key=lambda result: result.score, reverse=True)
+
+
+def filter_alignments(
+    alignments: Iterable[AlignmentResult],
+    min_score: float = 0.0,
+    require_region_match: bool = False,
+    required_theme: Optional[str] = None,
+) -> List[AlignmentResult]:
+    """Filter alignment results based on score and qualitative checks."""
+
+    required_theme_normalized = required_theme.lower().strip() if required_theme else None
+    filtered: List[AlignmentResult] = []
+    for result in alignments:
+        if result.score < min_score:
+            continue
+        if require_region_match and not result.region_match:
+            continue
+        if required_theme_normalized:
+            grant_themes = [theme.lower() for theme in result.grant.themes]
+            if required_theme_normalized not in grant_themes:
+                continue
+        filtered.append(result)
+
+    return sorted(filtered, key=lambda result: result.score, reverse=True)
+
+
+def top_for_ngo(
+    ngo: NGO,
+    grants: Iterable[GrantOpportunity],
+    limit: int = 3,
+    min_score: float = 0.0,
+    require_region_match: bool = False,
+) -> List[AlignmentResult]:
+    """Convenience helper to fetch the highest-value alignments for one NGO."""
+
+    all_alignments = [score_alignment(ngo, grant) for grant in grants]
+    filtered = filter_alignments(
+        all_alignments,
+        min_score=min_score,
+        require_region_match=require_region_match,
+    )
+    return filtered[:limit]

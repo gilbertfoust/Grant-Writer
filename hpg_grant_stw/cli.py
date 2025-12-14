@@ -90,10 +90,40 @@ def build_parser() -> argparse.ArgumentParser:
 
     align_parser = subparsers.add_parser("align", help="Score NGO <> grant matches and output JSON.")
     align_parser.add_argument("--source", default="demo", help="Which source to scrape (default: demo).")
+    align_parser.add_argument(
+        "--min-score",
+        type=float,
+        default=0.0,
+        help="Minimum alignment score to include in the JSON output.",
+    )
+    align_parser.add_argument(
+        "--require-region",
+        action="store_true",
+        help="Only include results where the NGO operates in the grant region.",
+    )
+    align_parser.add_argument(
+        "--theme",
+        help="Require a specific grant theme to be present (case-insensitive).",
+    )
 
     write_parser = subparsers.add_parser("write", help="Generate draft grants for top matches.")
     write_parser.add_argument("--source", default="demo", help="Which source to scrape (default: demo).")
     write_parser.add_argument("--max", type=int, default=5, help="Maximum drafts to generate.")
+    write_parser.add_argument(
+        "--min-score",
+        type=float,
+        default=0.0,
+        help="Minimum alignment score required before drafting a proposal.",
+    )
+    write_parser.add_argument(
+        "--require-region",
+        action="store_true",
+        help="Only draft proposals where the NGO operates in the grant region.",
+    )
+    write_parser.add_argument(
+        "--theme",
+        help="Require a specific grant theme to be present before drafting (case-insensitive).",
+    )
 
     parser.add_argument(
         "--demo",
@@ -127,12 +157,24 @@ def main(argv: List[str] | None = None) -> None:
     if args.command == "align":
         grants = list(scraper.scrape(args.source))
         alignments = matcher.align(ngos, grants)
+        alignments = matcher.filter_alignments(
+            alignments,
+            min_score=args.min_score,
+            require_region_match=args.require_region,
+            required_theme=args.theme,
+        )
         print(json.dumps([_serialize_alignment(result) for result in alignments], indent=2))
         return
 
     if args.command == "write":
         grants = list(scraper.scrape(args.source))
         alignments = matcher.align(ngos, grants)
+        alignments = matcher.filter_alignments(
+            alignments,
+            min_score=args.min_score,
+            require_region_match=args.require_region,
+            required_theme=args.theme,
+        )
         drafts = writer.batch_build(alignments, max_results=args.max)
         saved_paths = _save_drafts(drafts, args.output)
         print("Drafts saved:")
